@@ -18,7 +18,8 @@ from fabric.tasks import execute
 ###############################################################
 
 #### Generic ####
-SSH_USER = "ubuntu"
+#SSH_USER = "ubuntu"
+SSH_USER = os.environ['USER']
 # If you need to specify a special ssh key, do it here (e.g EC2 key)
 #env.key_filename = "~/.ssh/giraph.pem"
 
@@ -42,11 +43,12 @@ EC2_INSTANCE_STORAGEDEV = None
 
 
 #### Package Information ####
-HADOOP_VERSION = "2.4.0"
+HADOOP_VERSION = "2.7.1"
 HADOOP_PACKAGE = "hadoop-%s" % HADOOP_VERSION
 #HADOOP_PACKAGE_URL = "http://apache.mirrors.spacedump.net/hadoop/common/stable/%s.tar.gz" % HADOOP_PACKAGE
-HADOOP_PACKAGE_URL = "http://www.whoishostingthis.com/mirrors/apache/hadoop/common/%(hadoop)s/%(hadoop)s.tar.gz" % {'hadoop': HADOOP_PACKAGE}
-HADOOP_PREFIX = "/home/ubuntu/Programs/%s" % HADOOP_PACKAGE
+#HADOOP_PACKAGE_URL = "http://www.whoishostingthis.com/mirrors/apache/hadoop/common/%(hadoop)s/%(hadoop)s.tar.gz" % {'hadoop': HADOOP_PACKAGE}
+HADOOP_PACKAGE_URL="https://dist.apache.org/repos/dist/release/hadoop/common/%s/%s.tar.gz" % (HADOOP_PACKAGE, HADOOP_PACKAGE)
+HADOOP_PREFIX = "%s/src/asap/%s" % (os.environ['HOME'], HADOOP_PACKAGE)
 HADOOP_CONF = os.path.join(HADOOP_PREFIX, "etc/hadoop")
 
 
@@ -61,7 +63,8 @@ PACKAGE_MANAGER_INSTALL = "apt-get -qq install %s" # Debian/Ubuntu
 # In principle, should just be a JRE for Hadoop, Python
 # for the Hadoop Configuration replacement script and wget
 # to get the Hadoop package
-REQUIREMENTS = ["wget", "python", "openjdk-7-jre-headless"] # Debian/Ubuntu
+#REQUIREMENTS = ["wget", "python", "openjdk-7-jre-headless"] # Debian/Ubuntu
+REQUIREMENTS = ["wget", "python", "openjdk-7-jdk"] # Debian/Ubuntu
 #REQUIREMENTS = ["wget", "python", "jre7-openjdk-headless"] # Arch Linux
 #REQUIREMENTS = ["wget", "python", "java-1.7.0-openjdk-devel"] # CentOS
 
@@ -85,8 +88,11 @@ REQUIREMENTS_PRE_COMMANDS = []
 # Set this to True/False depending on whether or not ENVIRONMENT_FILE
 # points to an environment file that is automatically loaded in a new
 # shell session
-ENVIRONMENT_FILE_NOTAUTOLOADED = False
-ENVIRONMENT_FILE = "/home/ubuntu/.bashrc"
+#ENVIRONMENT_FILE_NOTAUTOLOADED = False
+ENVIRONMENT_FILE_NOTAUTOLOADED = True
+#ENVIRONMENT_FILE = "/home/ubuntu/.bashrc"
+ENVIRONMENT_FILE = "%s/.profile" % os.environ['HOME']
+print "---->%s" % ENVIRONMENT_FILE
 #ENVIRONMENT_FILE_NOTAUTOLOADED = True
 #ENVIRONMENT_FILE = "/home/ubuntu/hadoop2_env.sh"
 
@@ -115,10 +121,12 @@ ENVIRONMENT_VARIABLES = [
 #### Host data (for non-EC2 deployments) ####
 HOSTS_FILE="/etc/hosts"
 NET_INTERFACE="eth0"
-RESOURCEMANAGER_HOST = "resourcemanager.alexjf.net"
+#RESOURCEMANAGER_HOST = "resourcemanager.alexjf.net"
+RESOURCEMANAGER_HOST = "localhost"
 NAMENODE_HOST = RESOURCEMANAGER_HOST
 
-SLAVE_HOSTS = ["slave%d.alexjf.net" % i for i in range(1, 6)]
+#SLAVE_HOSTS = ["slave%d.alexjf.net" % i for i in range(1, 6)]
+SLAVE_HOSTS = ["localhost"]
 # Or equivalently
 #SLAVE_HOSTS = ["slave1.alexjf.net", "slave2.alexjf.net",
 #          "slave3.alexjf.net", "slave4.alexjf.net",
@@ -142,9 +150,12 @@ JOBHISTORY_PORT = 10020
 # will be backed up.
 CONFIGURATION_FILES_CLEAN = False
 
+#HADOOP_TEMP = "/mnt/hadoop/tmp"
 HADOOP_TEMP = "/mnt/hadoop/tmp"
-HDFS_DATA_DIR = "/mnt/hdfs/datanode"
-HDFS_NAME_DIR = "/mnt/hdfs/namenode"
+#HDFS_DATA_DIR = "/mnt/hdfs/datanode"
+HDFS_DATA_DIR = "%s/src/asap/hdfs/datanode" % os.environ['HOME']
+#HDFS_NAME_DIR = "/mnt/hdfs/namenode"
+HDFS_NAME_DIR = "%s/src/asap/hdfs/namenode" % os.environ['HOME']
 
 IMPORTANT_DIRS = [HADOOP_TEMP, HDFS_DATA_DIR, HDFS_NAME_DIR]
 
@@ -155,8 +166,8 @@ def updateHadoopSiteValues():
 
     CORE_SITE_VALUES = {
         "fs.defaultFS": "hdfs://%s/" % NAMENODE_HOST,
-        "fs.s3n.awsAccessKeyId": AWS_ACCESSKEY_ID,
-        "fs.s3n.awsSecretAccessKey": AWS_ACCESSKEY_SECRET,
+        #"fs.s3n.awsAccessKeyId": AWS_ACCESSKEY_ID,
+        #"fs.s3n.awsSecretAccessKey": AWS_ACCESSKEY_SECRET,
         "hadoop.tmp.dir": HADOOP_TEMP
     }
 
