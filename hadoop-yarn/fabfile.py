@@ -48,7 +48,7 @@ HADOOP_PACKAGE = "hadoop-%s" % HADOOP_VERSION
 #HADOOP_PACKAGE_URL = "http://apache.mirrors.spacedump.net/hadoop/common/stable/%s.tar.gz" % HADOOP_PACKAGE
 #HADOOP_PACKAGE_URL = "http://www.whoishostingthis.com/mirrors/apache/hadoop/common/%(hadoop)s/%(hadoop)s.tar.gz" % {'hadoop': HADOOP_PACKAGE}
 HADOOP_PACKAGE_URL="https://dist.apache.org/repos/dist/release/hadoop/common/%s/%s.tar.gz" % (HADOOP_PACKAGE, HADOOP_PACKAGE)
-HADOOP_PREFIX = "%s/src/asap/%s" % (os.environ['HOME'], HADOOP_PACKAGE)
+HADOOP_PREFIX = "%s/asap/%s" % (os.environ['HOME'], HADOOP_PACKAGE)
 HADOOP_CONF = os.path.join(HADOOP_PREFIX, "etc/hadoop")
 
 
@@ -153,9 +153,9 @@ CONFIGURATION_FILES_CLEAN = False
 #HADOOP_TEMP = "/mnt/hadoop/tmp"
 HADOOP_TEMP = "/mnt/hadoop/tmp"
 #HDFS_DATA_DIR = "/mnt/hdfs/datanode"
-HDFS_DATA_DIR = "%s/src/asap/hdfs/datanode" % os.environ['HOME']
+HDFS_DATA_DIR = "%s/asap/hdfs/datanode" % os.environ['HOME']
 #HDFS_NAME_DIR = "/mnt/hdfs/namenode"
-HDFS_NAME_DIR = "%s/src/asap/hdfs/namenode" % os.environ['HOME']
+HDFS_NAME_DIR = "%s/asap/hdfs/namenode" % os.environ['HOME']
 
 IMPORTANT_DIRS = [HADOOP_TEMP, HDFS_DATA_DIR, HDFS_NAME_DIR]
 
