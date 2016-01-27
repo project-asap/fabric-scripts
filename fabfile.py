@@ -9,6 +9,7 @@ ASAP_HOME = "%s/asap" % os.environ['HOME']
 
 WF_HOME = "%s/workflow" % ASAP_HOME
 WF_REPO = "https://github.com/project-asap/workflow.git"
+WF_PORT = "8888"
 
 IRES_HOME = "%s/IReS-Platform" % ASAP_HOME
 IRES_REPO = "https://github.com/project-asap/IReS-Platform.git"
@@ -19,17 +20,23 @@ SPARK_BRANCH = "nested-hierarchical"
 
 VHOST = "asap"
 VHOST_CONFIG = """server {
-    listen   8081;
+    listen   %s;
 
     location / {
 
     root %s/pub/;
     index  main.html;
     }
-}""" % WF_HOME
+}""" % (WF_PORT, WF_HOME)
 
 def install_npm():
-    sudo("apt-get install npm")
+    try:
+        run("npm version")
+    except:
+        sudo("apt-get install npm")
+    user = os.environ['USER']
+    group = run("groups|cut -d ' ' -f 1")
+    sudo("chown -fR %s:%s ~/.npm ~/tmp" % (user, group))
 
 def uninstall_npm():
     sudo("apt-get purge npm")
@@ -48,7 +55,8 @@ def config_nginx():
     sites_available = "/etc/nginx/sites-available/%s" % VHOST
     sites_enabled = "/etc/nginx/sites-enabled/%s" % VHOST
     sudo("echo \"%s\" > %s" % (VHOST_CONFIG, sites_available))
-    sudo("ln -s %s %s" % (sites_available, sites_enabled))
+    if not exists(sites_enabled):
+        sudo("ln -s %s %s" % (sites_available, sites_enabled))
 
 def install_nginx():
     sudo("apt-get install nginx")
@@ -78,7 +86,7 @@ def install_wf():
         run("grunt")
 
 def test_wf():
-    content = run("curl http://localhost:8081")
+    content = run("curl http://localhost:%s" % WF_PORT)
     assert("workflow" in content)
 
 def bootstrap_wf():
