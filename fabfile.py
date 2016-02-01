@@ -1,7 +1,12 @@
 import os, sys
 
+from functools import wraps
+
 from fabric.api import cd, env, run, sudo
+from fabric.context_managers import quiet
 from fabric.contrib.files import exists
+from fabric.decorators import task
+from fabric.operations import prompt
 
 env.hosts = ["localhost"]
 
@@ -29,6 +34,28 @@ VHOST_CONFIG = """server {
     }
 }""" % (WF_PORT, WF_HOME)
 
+
+def yes_or_no(s):
+    if s not in ('y', 'n'):
+        raise Exception('Just say yes (y) or no (n).')
+    return s
+
+def acknowledge(msg):
+    def wrap(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            r = prompt('%s [y/N]' % msg, default='n', validate=yes_or_no)
+            if r == 'y':
+                func(*args, **kwargs)
+        return wrapped
+    return wrap
+
+@task
+def change_xml_property(name, value, file_):
+    run("sed -i 's/\(<%s>\)\([^\"]*\)\(<\/%s>\)/\\1%s\\3/g' %s" %
+        (name, name, value, file_))
+
+@task
 def install_npm():
     try:
         run("npm version")
@@ -36,11 +63,15 @@ def install_npm():
         sudo("apt-get install npm")
     user = os.environ['USER']
     group = run("groups|cut -d ' ' -f 1")
-    sudo("chown -fR %s:%s ~/.npm ~/tmp" % (user, group))
+    with quiet():
+        sudo("chown -fR %s:%s ~/.npm ~/tmp" % (user, group))
 
+@task
+@acknowledge('Do you want to remove npm?')
 def uninstall_npm():
     sudo("apt-get purge npm")
 
+@task
 def install_grunt():
     # install grunt-cli
     sudo("npm install -g grunt-cli")
@@ -48,9 +79,12 @@ def install_grunt():
         # create symbolic link for nodejs
         sudo("ln -s /usr/bin/nodejs /usr/bin/node")
 
+@task
+@acknowledge('Do you want to remove grant?')
 def uninstall_grunt():
     sudo("npm uninstall -g grunt-cli")
 
+@task
 def config_nginx():
     sites_available = "/etc/nginx/sites-available/%s" % VHOST
     sites_enabled = "/etc/nginx/sites-enabled/%s" % VHOST
@@ -58,25 +92,39 @@ def config_nginx():
     if not exists(sites_enabled):
         sudo("ln -s %s %s" % (sites_available, sites_enabled))
 
+@task
 def install_nginx():
     sudo("apt-get install nginx")
     config_nginx()
 
+@task
 def start_nginx():
     sudo("nginx -s reload")
 
+@task
+@acknowledge('Do you want to stop nginx?')
 def stop_nginx():
-    sudo("nginx -s stop")
+    with quiet():
+        sudo("nginx -s stop")
 
+@task
+@acknowledge('Do you want to remove nginx?')
 def uninstall_nginx():
     sudo("apt-get purge nginx nginx-common")
 
+@task
 def install_mvn():
     try :
         run("mvn -v")
     except :
         sudo("apt-get install maven")
 
+@task
+@acknowledge('Do you want to remove maven?')
+def uninstall_mvn():
+    sudo("apt-get install maven")
+
+@task
 def install_wf():
     if not exists(WF_HOME):
         with cd(ASAP_HOME):
@@ -85,19 +133,18 @@ def install_wf():
         run("npm install")
         run("grunt")
 
+@task
 def test_wf():
     content = run("curl http://localhost:%s" % WF_PORT)
     assert("workflow" in content)
 
+@task
 def bootstrap_wf():
     install_npm()
     install_grunt()
-
     install_wf()
-
     install_nginx()
     start_nginx()
-
     test_wf()
 
 def check_for_yarn():
@@ -110,52 +157,69 @@ def check_for_yarn():
         HADOOP_VERSION = run("%s/bin/yarn version|head -1|cut -d ' ' -f 2" % HADOOP_PREFIX)
     return HADOOP_PREFIX, HADOOP_VERSION
 
+@task
 def clone_IReS():
     if not exists(IRES_HOME):
         with cd(ASAP_HOME):
             run("git clone %s" % IRES_REPO)
 
+@task
 def start_IReS():
     with cd(IRES_HOME):
         run_script = "asap-platform/asap-server/src/main/scripts/asap-server"
         run("%s start" % run_script)
 
+@task
 def stop_IReS():
     with cd(IRES_HOME):
         run_script = "asap-platform/asap-server/src/main/scripts/asap-server"
         run("%s stop" % run_script)
 
+@task
+def test_IReS():
+    run("java TestOperators")
+
+@task
 def bootstrap_IReS():
+    def build():
+        # Conditional build
+        if not exists("asap-platform/asap-server/target"):
+            for d in ("panic", "cloudera-kitten", "asap-platform"):
+                with cd(d):
+                    run("mvn clean install -DskipTests")
+
     install_mvn()
 
     clone_IReS()
 
     with cd(IRES_HOME):
-        # Conditional build
-        if not exists("asap-platform/asap-server/target"):
-            for d in ("cloudera-kitten", "panic", "asap-platform"):
-                with cd(d):
-                    run("mvn clean install -DskipTests")
-
+        # Temporary hack for solving temporary issues with inner dependencies
+        with quiet():
+            build()
+        build()
+        # Update hadoop version
+        HADOOP_PREFIX, HADOOP_VERSION = check_for_yarn()
+        for f in ('asap-platform/pom.xml', 'cloudera-kitten/pom.xml'):
+            change_xml_property("hadoop.version", HADOOP_VERSION, f)
         # Set IRES_HOME in asap-server script
         run_script = "asap-platform/asap-server/src/main/scripts/asap-server"
         c = run("grep \"^IRES_HOME=\" %s | wc -l" % run_script)
         if (c == "0"): # only if it is not already set
             run("sed -i '/#$IRES_HOME=$/a\IRES_HOME=%s' %s" % (IRES_HOME,
                                                             run_script))
-        HADOOP_PREFIX, _ = check_for_yarn()
         for f in ("core-site.xml", "yarn-site.xml"):
             sudo("cp %s/etc/hadoop/%s "
                 "asap-platform/asap-server/target/conf/" % (HADOOP_PREFIX, f))
-
     start_IReS()
+    test_IReS()
 
-
+@task
 def clone_spark():
     if not exists(SPARK_HOME):
         with cd(ASAP_HOME):
             run("git clone %s" % SPARK_REPO)
 
+@task
 def bootstrap_spark():
     clone_spark()
 
@@ -165,6 +229,7 @@ def bootstrap_spark():
         run("./sbt/sbt -Dhadoop.version=%s -Pyarn -DskipTests clean assembly" %
             HADOOP_VERSION)
 
+@task
 def bootstrap():
 
     if not exists(ASAP_HOME):
@@ -177,16 +242,23 @@ def bootstrap():
 #    bootstrap_web_analytics()
 
 
+@task
 def remove_wf():
     stop_nginx()
-
-    #TODO Add prompt
     uninstall_nginx()
-
     run("rm -rf %s" % WF_HOME)
-
     uninstall_grunt()
     uninstall_npm()
 
+@task
+def remove_IReS():
+    stop_IReS()
+    run("rm -rf %s" % IRES_HOME)
+    uninstall_mvn()
+
+@task
 def remove():
     remove_wf()
+    remove_IReS()
+
+    run("rm -rf %s" % ASAP_HOME)
