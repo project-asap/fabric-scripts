@@ -12,9 +12,9 @@ env.hosts = ["localhost"]
 
 ASAP_HOME = "%s/asap" % os.environ['HOME']
 
-WF_HOME = "%s/workflow" % ASAP_HOME
-WF_REPO = "https://github.com/project-asap/workflow.git"
-WF_PORT = "8888"
+WMT_HOME = "%s/workflow" % ASAP_HOME
+WMT_REPO = "https://github.com/project-asap/workflow.git"
+WMT_PORT = "8888"
 
 IRES_HOME = "%s/IReS-Platform" % ASAP_HOME
 IRES_REPO = "https://github.com/project-asap/IReS-Platform.git"
@@ -32,7 +32,7 @@ VHOST_CONFIG = """server {
     root %s/pub/;
     index  main.html;
     }
-}""" % (WF_PORT, WF_HOME)
+}""" % (WMT_PORT, WMT_HOME)
 
 
 def yes_or_no(s):
@@ -125,27 +125,27 @@ def uninstall_mvn():
     sudo("apt-get install maven")
 
 @task
-def install_wf():
-    if not exists(WF_HOME):
+def install_wmt():
+    if not exists(WMT_HOME):
         with cd(ASAP_HOME):
-            run("git clone %s" % WF_REPO)
-    with cd(WF_HOME):
+            run("git clone %s" % WMT_REPO)
+    with cd(WMT_HOME):
         run("npm install")
         run("grunt")
 
 @task
-def test_wf():
-    content = run("curl http://localhost:%s" % WF_PORT)
+def test_wmt():
+    content = run("curl http://localhost:%s" % WMT_PORT)
     assert("workflow" in content)
 
 @task
-def bootstrap_wf():
+def bootstrap_wmt():
     install_npm()
     install_grunt()
-    install_wf()
+    install_wmt()
     install_nginx()
     start_nginx()
-    test_wf()
+    test_wmt()
 
 def check_for_yarn():
     try:
@@ -234,7 +234,7 @@ def bootstrap():
 
     if not exists(ASAP_HOME):
         run("mkdir -p %s" % ASAP_HOME)
-    bootstrap_wf()
+    bootstrap_wmt()
     bootstrap_IReS()
     bootstrap_spark()
 #    bootstrap_operators()
@@ -243,10 +243,10 @@ def bootstrap():
 
 
 @task
-def remove_wf():
+def remove_wmt():
     stop_nginx()
     uninstall_nginx()
-    run("rm -rf %s" % WF_HOME)
+    run("rm -rf %s" % WMT_HOME)
     uninstall_grunt()
     uninstall_npm()
 
@@ -258,7 +258,7 @@ def remove_IReS():
 
 @task
 def remove():
-    remove_wf()
+    remove_wmt()
     remove_IReS()
 
     run("rm -rf %s" % ASAP_HOME)
