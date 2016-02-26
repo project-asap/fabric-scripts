@@ -177,7 +177,10 @@ def stop_IReS():
 
 @task
 def test_IReS():
-    run("java TestOperators")
+    with cd("%s/asap-platform/asap-client" % IRES_HOME):
+        for eg in ("TestOperators", "TestWorkflows"):
+            run("mvn exec:java -Dexec.mainClass="
+                "\"gr.ntua.cslab.asap.examples.%s\"" % eg)
 
 @task
 def bootstrap_IReS():
@@ -193,9 +196,6 @@ def bootstrap_IReS():
     clone_IReS()
 
     with cd(IRES_HOME):
-        # Temporary hack for solving temporary issues with inner dependencies
-        with quiet():
-            build()
         build()
         # Update hadoop version
         HADOOP_PREFIX, HADOOP_VERSION = check_for_yarn()
@@ -203,10 +203,7 @@ def bootstrap_IReS():
             change_xml_property("hadoop.version", HADOOP_VERSION, f)
         # Set IRES_HOME in asap-server script
         run_script = "asap-platform/asap-server/src/main/scripts/asap-server"
-        c = run("grep \"^IRES_HOME=\" %s | wc -l" % run_script)
-        if (c == "0"): # only if it is not already set
-            run("sed -i '/#$IRES_HOME=$/a\IRES_HOME=%s' %s" % (IRES_HOME,
-                                                            run_script))
+        run("sed -i 's/^\(IRES_HOME\s*=\s*\).*$/\\1%s/' %s" % (IRES_HOME, run_script))
         for f in ("core-site.xml", "yarn-site.xml"):
             sudo("cp %s/etc/hadoop/%s "
                 "asap-platform/asap-server/target/conf/" % (HADOOP_PREFIX, f))
