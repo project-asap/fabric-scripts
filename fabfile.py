@@ -216,15 +216,34 @@ def clone_spark():
         with cd(ASAP_HOME):
             run("git clone %s" % SPARK_REPO)
 
+
+@task
+def start_spark():
+    with cd(SPARK_HOME):
+        run("./sbin/start-all.sh")
+
+def stop_spark():
+    with cd(SPARK_HOME):
+        run("./sbin/stop-all.sh")
+
+@task
+def test_spark():
+    pass
+    #test_nested_map()
+    #test_hierarchical()
+    #test_distributed_scheduler()
+
 @task
 def bootstrap_spark():
     clone_spark()
 
     with cd(SPARK_HOME):
         _, HADOOP_VERSION = check_for_yarn()
-        run("git checkout hierR")
-        run("./sbt/sbt -Dhadoop.version=%s -Pyarn -DskipTests clean assembly" %
+        run("git checkout %s" % SPARK_BRANCH)
+        run("./build/sbt -Dhadoop.version=%s -Pyarn -DskipTests clean assembly" %
             HADOOP_VERSION)
+    start_spark()
+    test_spark()
 
 @task
 def bootstrap():
@@ -254,8 +273,14 @@ def remove_IReS():
     uninstall_mvn()
 
 @task
+def remove_spark():
+    stop_spark()
+    run("rm -rf %s" % SPARK_HOME)
+
+@task
 def remove():
     remove_wmt()
     remove_IReS()
+    remove_spark()
 
     run("rm -rf %s" % ASAP_HOME)
