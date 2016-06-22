@@ -92,7 +92,7 @@ ENVIRONMENT_FILE = "/home/ubuntu/.bashrc"
 # will be backed up.
 ENVIRONMENT_FILE_CLEAN = False
 ENVIRONMENT_VARIABLES = [
-    ("JAVA_HOME", "/usr/lib/jvm/java-7-openjdk-amd64"), # Debian/Ubuntu 64 bits
+    ("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64"), # Debian/Ubuntu 64 bits
     #("JAVA_HOME", "/usr/lib/jvm/java-7-openjdk"), # Arch Linux
     #("JAVA_HOME", "/usr/java/jdk1.7.0_51"), # CentOS
     ("HADOOP_PREFIX", HADOOP_PREFIX),

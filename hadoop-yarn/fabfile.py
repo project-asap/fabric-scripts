@@ -64,7 +64,7 @@ PACKAGE_MANAGER_INSTALL = "apt-get -qq install %s" # Debian/Ubuntu
 # for the Hadoop Configuration replacement script and wget
 # to get the Hadoop package
 #REQUIREMENTS = ["wget", "python", "openjdk-7-jre-headless"] # Debian/Ubuntu
-REQUIREMENTS = ["wget", "python", "openjdk-7-jdk"] # Debian/Ubuntu
+REQUIREMENTS = ["wget", "python", "openjdk-8-jdk"] # Debian/Ubuntu
 #REQUIREMENTS = ["wget", "python", "jre7-openjdk-headless"] # Arch Linux
 #REQUIREMENTS = ["wget", "python", "java-1.7.0-openjdk-devel"] # CentOS
 
@@ -102,7 +102,7 @@ print "---->%s" % ENVIRONMENT_FILE
 # will be backed up.
 ENVIRONMENT_FILE_CLEAN = False
 ENVIRONMENT_VARIABLES = [
-    ("JAVA_HOME", "/usr/lib/jvm/java-7-openjdk-amd64"), # Debian/Ubuntu 64 bits
+    ("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64"), # Debian/Ubuntu 64 bits
     #("JAVA_HOME", "/usr/lib/jvm/java-7-openjdk"), # Arch Linux
     #("JAVA_HOME", "/usr/java/jdk1.7.0_51"), # CentOS
     ("HADOOP_PREFIX", HADOOP_PREFIX),
