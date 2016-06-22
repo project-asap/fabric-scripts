@@ -135,6 +135,9 @@ def install_wmt():
 
 @task
 def test_wmt():
+    with cd(os.path.join(WMT_HOME, 'pub/py')):
+        sudo('apt-get install python-ruamel.yaml')
+        run('python -m unittest -v testmain')
     content = run("curl http://localhost:%s" % WMT_PORT)
     assert("workflow" in content)
 
