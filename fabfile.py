@@ -3,7 +3,7 @@ import os, sys
 from functools import wraps
 
 from fabric.api import cd, env, run, sudo
-from fabric.context_managers import quiet
+from fabric.context_managers import quiet, shell_env
 from fabric.contrib.files import exists
 from fabric.decorators import task
 from fabric.operations import prompt
@@ -169,17 +169,22 @@ def clone_IReS():
 @task
 def start_IReS():
     with cd(IRES_HOME):
-        run_script = "asap-platform/asap-server/src/main/scripts/asap-server"
-        run("%s start" % run_script)
+        with shell_env(ASAP_SERVER_HOME='%s' % os.path.join(IRES_HOME, 'asap-platform/asap-server/target')):
+            run("nohup ./asap-platform/asap-server/src/main/scripts/asap-server start")
 
 @task
 def stop_IReS():
     with cd(IRES_HOME):
-        run_script = "asap-platform/asap-server/src/main/scripts/asap-server"
-        run("%s stop" % run_script)
+        with shell_env(ASAP_SERVER_HOME='%s' % os.path.join(IRES_HOME, 'asap-platform/asap-server/target')):
+            run("./asap-platform/asap-server/src/main/scripts/asap-server stop")
 
 @task
 def test_IReS():
+    with shell_env(ASAP_HOME='%s' % IRES_HOME):
+        with cd(IRES_HOME):
+            for d in ("panic", "cloudera-kitten", "asap-platform"):
+                with cd(d):
+                    run("mvn -Dmaven.test.failure.ignore verify")
     with cd("%s/asap-platform/asap-client" % IRES_HOME):
         for eg in ("TestOperators", "TestWorkflows"):
             run("mvn exec:java -Dexec.mainClass="
@@ -204,9 +209,6 @@ def bootstrap_IReS():
         HADOOP_PREFIX, HADOOP_VERSION = check_for_yarn()
         for f in ('asap-platform/pom.xml', 'cloudera-kitten/pom.xml'):
             change_xml_property("hadoop.version", HADOOP_VERSION, f)
-        # Set IRES_HOME in asap-server script
-        run_script = "asap-platform/asap-server/src/main/scripts/asap-server"
-        run("sed -i 's/^\(IRES_HOME\s*=\s*\).*$/\\1%s/' %s" % (IRES_HOME, run_script))
         for f in ("core-site.xml", "yarn-site.xml"):
             sudo("cp %s/etc/hadoop/%s "
                 "asap-platform/asap-server/target/conf/" % (HADOOP_PREFIX, f))
