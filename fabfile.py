@@ -8,6 +8,8 @@ from fabric.contrib.files import exists
 from fabric.decorators import task
 from fabric.operations import prompt
 
+from socket import gethostname
+
 env.hosts = ["localhost"]
 
 ASAP_HOME = "%s/asap" % os.environ['HOME']
@@ -16,12 +18,19 @@ WMT_HOME = "%s/workflow" % ASAP_HOME
 WMT_REPO = "https://github.com/project-asap/workflow.git"
 WMT_PORT = "8888"
 
+HOSTNAME = gethostname()
+
 IRES_HOME = "%s/IReS-Platform" % ASAP_HOME
 IRES_REPO = "https://github.com/project-asap/IReS-Platform.git"
 
-SPARK_HOME = "%s/Spark-Nested" % ASAP_HOME
-SPARK_REPO = "https://github.com/project-asap/Spark-Nested.git"
-SPARK_BRANCH = "nested-hierarchical"
+SPARK_HOME = "%s/spark01" % ASAP_HOME
+SPARK_REPO = "https://github.com/project-asap/spark01.git"
+SPARK_BRANCH = "distScheduling"
+
+SPARK_TESTS_HOME = "%s/spark-tests" % ASAP_HOME
+SPARK_TESTS_REPO = "https://github.com/project-asap/spark-tests.git"
+
+SBT_VERSION = "0.13.11"
 
 VHOST = "asap"
 VHOST_CONFIG = """server {
@@ -223,20 +232,65 @@ def clone_spark():
 
 
 @task
+def clone_spark_tests():
+    if not exists(SPARK_TESTS_HOME):
+        with cd(ASAP_HOME):
+            run("git clone %s" % SPARK_TESTS_REPO)
+
+@task
 def start_spark():
     with cd(SPARK_HOME):
         run("./sbin/start-all.sh")
 
+
+@task
 def stop_spark():
     with cd(SPARK_HOME):
         run("./sbin/stop-all.sh")
 
 @task
+def build_spark_tests():
+    with cd(SPARK_TESTS_HOME):
+        library_path = os.path.join(SPARK_TESTS_HOME, 'lib')
+
+        # copy spark-assembly jar to the library
+        run("mkdir -p %s" % library_path)
+        run("cp %s/assembly/target/scala-2.10/spark-assembly-*.jar lib/" % SPARK_HOME)
+        run("sbt clean package")
+
+@task
+def test_spark_hierarchical():
+    with cd(SPARK_TESTS_HOME):
+        run("%s/bin/spark-submit --class HierarchicalKMeansPar "
+            "target/scala-2.10/spark-tests_2.10-1.0.jar spark://%s:7077 "
+            "100 2 2 2 file:///%s/data/hierRDD/test0.txt --dist-sched false" %
+            (SPARK_HOME, HOSTNAME, SPARK_TESTS_HOME))
+
+@task
+def test_spark_distributed_scheduler():
+    with cd(SPARK_TESTS_HOME):
+        run("%s/bin/spark-submit --class Run "
+        "target/scala-2.10/spark-tests_2.10-1.0.jar "
+        "--master spark://%s:7077 --algo Filter33 --dist-sched true "
+        "--nsched 4 --partitions 32 --runs 15" %
+        (SPARK_HOME, HOSTNAME))
+
+@task
 def test_spark():
-    pass
+    clone_spark_tests()
+
+    build_spark_tests()
+
     #test_nested_map()
-    #test_hierarchical()
-    #test_distributed_scheduler()
+    test_spark_hierarchical()
+    test_spark_distributed_scheduler()
+
+@task
+def install_sbt():
+    run("echo \"deb https://dl.bintray.com/sbt/debian /\" | sudo tee -a /etc/apt/sources.list.d/sbt.list")
+    run("sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 642AC823")
+    run("sudo apt-get update")
+    run("sudo apt-get install sbt")
 
 @task
 def bootstrap_spark():
@@ -245,8 +299,12 @@ def bootstrap_spark():
     with cd(SPARK_HOME):
         _, HADOOP_VERSION = check_for_yarn()
         run("git checkout %s" % SPARK_BRANCH)
-        run("./build/sbt -Dhadoop.version=%s -Pyarn -DskipTests clean assembly" %
-            HADOOP_VERSION)
+
+        # Change sbt version causing IllegalStateException https://github.com/sbt/sbt/issues/2015
+        run("sed -i \"/sbt.version=/ s/=.*/=%s/\" project/build.properties" % SBT_VERSION)
+
+        run("./build/sbt -Dhadoop.version=%s -Pyarn -DskipTests clean assembly"
+             % HADOOP_VERSION)
     start_spark()
     test_spark()
 
