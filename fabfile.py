@@ -297,10 +297,22 @@ def test_spark():
 
 @task
 def install_sbt():
-    run("echo \"deb https://dl.bintray.com/sbt/debian /\" | sudo tee -a /etc/apt/sources.list.d/sbt.list")
-    run("sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 642AC823")
-    run("sudo apt-get update")
-    run("sudo apt-get install sbt")
+    try:
+        run("sbt help")
+    except:
+        sbt_url = 'https://dl.bintray.com/sbt/debian'
+        try:
+            run("grep %s /etc/apt/sources.list.d/sbt.list" % sbt_url)
+        except:
+            run("echo \"deb https://dl.bintray.com/sbt/debian /\" | sudo tee -a /etc/apt/sources.list.d/sbt.list")
+        sudo("apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 642AC823")
+        sudo("apt-get update")
+        sudo("apt-get install sbt")
+
+@task
+@acknowledge('Do you want to remove sbt?')
+def uninstall_sbt():
+    sudo("apt-get purge sbt")
 
 @task
 def bootstrap_spark():
