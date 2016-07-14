@@ -33,16 +33,6 @@ SPARK_TESTS_REPO = "https://github.com/project-asap/spark-tests.git"
 SBT_VERSION = "0.13.11"
 
 VHOST = "asap"
-VHOST_CONFIG = """server {
-    listen   %s;
-
-    location / {
-
-    root %s/pub/;
-    index  main.html;
-    }
-}""" % (WMT_PORT, WMT_HOME)
-
 
 def yes_or_no(s):
     if s not in ('y', 'n'):
@@ -89,6 +79,15 @@ def install_grunt():
         sudo("ln -s /usr/bin/nodejs /usr/bin/node")
 
 @task
+def install_php_fpm():
+    sudo('apt-get install php-fpm')
+
+@task
+@acknowledge('Do you want to remove php-fpm?')
+def uninstall_php_fpm():
+    sudo('apt-get purge php-fpm')
+
+@task
 @acknowledge('Do you want to remove grant?')
 def uninstall_grunt():
     sudo("npm uninstall -g grunt-cli")
@@ -97,8 +96,13 @@ def uninstall_grunt():
 def config_nginx():
     sites_available = "/etc/nginx/sites-available/%s" % VHOST
     sites_enabled = "/etc/nginx/sites-enabled/%s" % VHOST
-    sudo("echo \"%s\" > %s" % (VHOST_CONFIG, sites_available))
-    if not exists(sites_enabled):
+    with cd(WMT_HOME):
+        sudo("cp wmt.conf.default %s" % sites_available)
+        sudo("sed -ri \"s/(listen).*/\\1\\t8888/\" %s" % sites_available)
+        sudo("sed -r \"s/\/Users\/max\/Projects\/workflow/%s/\" %s" %
+                ('\/'.join(WMT_HOME.split('/')), sites_available))
+        if exists(sites_enabled):
+            sudo("rm %s" % sites_enabled)
         sudo("ln -s %s %s" % (sites_available, sites_enabled))
 
 @task
@@ -153,6 +157,7 @@ def test_wmt():
 @task
 def bootstrap_wmt():
     install_npm()
+    install_php_fpm()
     install_grunt()
     install_wmt()
     install_nginx()
@@ -327,6 +332,7 @@ def remove_wmt():
     uninstall_nginx()
     run("rm -rf %s" % WMT_HOME)
     uninstall_grunt()
+    uninstall_php_fpm()
     uninstall_npm()
 
 @task
