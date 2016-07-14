@@ -30,6 +30,11 @@ SPARK_BRANCH = "distScheduling"
 SPARK_TESTS_HOME = "%s/spark-tests" % ASAP_HOME
 SPARK_TESTS_REPO = "https://github.com/project-asap/spark-tests.git"
 
+SWAN_HOME = "%s/swan" % ASAP_HOME
+SWAN_LLVM_REPO = "https://github.com/project-asap/swan_llvm.git"
+SWAN_CLANG_REPO = "https://github.com/project-asap/swan_clang.git"
+SWAN_RT_REPO = "https://github.com/project-asap/swan_runtime.git"
+
 SBT_VERSION = "0.13.11"
 
 VHOST = "asap"
@@ -314,6 +319,59 @@ def bootstrap_spark():
     test_spark()
 
 @task
+def install_cmake():
+    sudo('apt-get install cmake')
+
+@task
+@acknowledge('Do you want to remove cmake?')
+def uninstall_cmake():
+    sudo("apt-get purge cmake")
+
+@task
+def test_clang():
+    run('export PATH=$PATH:%s/build/bin' % SWAN_HOME)
+    run('clang --help')
+    run('clang++ --help')
+    run('clang llvm/utils/count/count.c -fsyntax-only')
+    run('clang llvm/utils/count/count.c -S -emit-llvm -o -')
+    run('clang llvm/utils/count/count.c -S -emit-llvm -o - -O3')
+    run('clang llvm/utils/count/count.c -S -O3 -o -')
+
+@task
+def bootstrap_swan():
+    install_cmake()
+
+    run('mkdir -pp %s' % SWAN_HOME)
+
+    with cd(SWAN_HOME):
+        run("git clone %s llvm" % SWAN_LLVM_REPO)
+        run('mkdir -p llvm/tools/clang')
+        run("git clone %s llvm/tools/clang" % SWAN_CLANG_REPO)
+        run('mkdir -p build')
+        with cd('build'):
+            run('cmake -G "Unix Makefiles" ../llvm')
+            run('make clean')
+            run('make')
+        test_clang()
+        run("git clone %s" % SWAN_RT_REPO)
+        with cd('swan_runtime'):
+            run("libtoolize")
+            run("aclocal")
+            run("automake --add-missing")
+            run("autoconf")
+            run("./configure --prefix=%s/swan_runtime/lib CC=../build/bin/clang CXX=../build/bin/clang++" % SWAN_HOME)
+            run("make clean")
+            run("make")
+        run("git clone https://github.com/project-asap/swan_tests.git")
+        with cd("swan_tests"):
+            run("make CXX=../build/bin/clang++ SWANRTDIR=../swan_runtime test")
+
+@task
+def remove_swan():
+    uninstall_cmake()
+    run("rm -rf %s" % SWAN_HOME)
+
+@task
 def bootstrap():
 
     if not exists(ASAP_HOME):
@@ -321,6 +379,7 @@ def bootstrap():
     bootstrap_wmt()
     bootstrap_IReS()
     bootstrap_spark()
+    bootstrap_swan()
 #    bootstrap_operators()
 #    bootstrap_telecom_analytics()
 #    bootstrap_web_analytics()
