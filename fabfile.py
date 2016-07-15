@@ -1,4 +1,5 @@
 import os, sys
+import time
 
 from functools import wraps
 
@@ -58,6 +59,18 @@ def acknowledge(msg):
 def change_xml_property(name, value, file_):
     run("sed -i 's/\(<%s>\)\([^\"]*\)\(<\/%s>\)/\\1%s\\3/g' %s" %
         (name, name, value, file_))
+
+
+def ping_service(url, status):
+    with quiet():
+        return run('curl -s -o /dev/null -w "%%{http_code}" %s' % url) == status
+
+def wait_until(somepredicate, timeout=100, period=0.25, *args, **kwargs):
+    t = time.time()
+    mustend = t + timeout
+    while time.time() < mustend:
+        if somepredicate(*args, **kwargs): return
+        time.sleep(period)
 
 @task
 def install_npm():
@@ -140,7 +153,7 @@ def install_mvn():
 @task
 @acknowledge('Do you want to remove maven?')
 def uninstall_mvn():
-    sudo("apt-get install maven")
+    sudo("apt-get purge maven")
 
 @task
 def install_wmt():
@@ -197,8 +210,11 @@ def stop_IReS():
         with shell_env(ASAP_SERVER_HOME='%s' % os.path.join(IRES_HOME, 'asap-platform/asap-server/target')):
             run("./asap-platform/asap-server/src/main/scripts/asap-server stop")
 
+
+
 @task
 def test_IReS():
+    wait_until(ping_service, url='http://localhost:1323', status='200')
     with shell_env(ASAP_HOME='%s' % IRES_HOME):
         with cd(IRES_HOME):
             for d in ("panic", "cloudera-kitten", "asap-platform"):
@@ -223,6 +239,9 @@ def bootstrap_IReS():
     clone_IReS()
 
     with cd(IRES_HOME):
+        # Temporary hack for solving temporary issues with inner dependencies
+        with quiet():
+            build()
         build()
         # Update hadoop version
         HADOOP_PREFIX, HADOOP_VERSION = check_for_yarn()
