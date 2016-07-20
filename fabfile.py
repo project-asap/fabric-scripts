@@ -359,32 +359,45 @@ def uninstall_cmake():
     sudo("apt-get purge cmake")
 
 @task
+def install_libnumadev():
+    sudo('apt-get install libnuma-dev')
+
+@task
+@acknowledge('Do you want to remove libnuma-dev?')
+def uninstall_libnumadev():
+    sudo("apt-get purge libnuma-dev")
+@task
 def test_clang():
-    run('export PATH=$PATH:%s/build/bin' % SWAN_HOME)
-    run('clang --help')
-    run('clang++ --help')
-    run('clang llvm/utils/count/count.c -fsyntax-only')
-    run('clang llvm/utils/count/count.c -S -emit-llvm -o -')
-    run('clang llvm/utils/count/count.c -S -emit-llvm -o - -O3')
-    run('clang llvm/utils/count/count.c -S -O3 -o -')
+    with cd(SWAN_HOME):
+        with shell_env(PATH='$PATH:%s/build/bin' % SWAN_HOME):
+            run('clang --help')
+            run('clang++ --help')
+            run('clang llvm/utils/count/count.c -fsyntax-only')
+            run('clang llvm/utils/count/count.c -S -emit-llvm -o -')
+            run('clang llvm/utils/count/count.c -S -emit-llvm -o - -O3')
+            run('clang llvm/utils/count/count.c -S -O3 -o -')
 
 @task
 def bootstrap_swan():
     install_cmake()
+    install_libnumadev()
 
     run('mkdir -pp %s' % SWAN_HOME)
 
     with cd(SWAN_HOME):
-        run("git clone %s llvm" % SWAN_LLVM_REPO)
+        if (not exists(os.path.join(SWAN_HOME, 'llvm'))):
+            run("git clone %s llvm" % SWAN_LLVM_REPO)
         run('mkdir -p llvm/tools/clang')
-        run("git clone %s llvm/tools/clang" % SWAN_CLANG_REPO)
+        if (not exists(os.path.join(SWAN_HOME, 'llvm/tools/clang'))):
+            run("git clone %s llvm/tools/clang" % SWAN_CLANG_REPO)
         run('mkdir -p build')
         with cd('build'):
             run('cmake -G "Unix Makefiles" ../llvm')
             run('make clean')
             run('make')
         test_clang()
-        run("git clone %s" % SWAN_RT_REPO)
+        if (not exists(os.path.join(SWAN_HOME, 'swan_runtime'))):
+            run("git clone %s" % SWAN_RT_REPO)
         with cd('swan_runtime'):
             run("libtoolize")
             run("aclocal")
@@ -400,6 +413,7 @@ def bootstrap_swan():
 @task
 def remove_swan():
     uninstall_cmake()
+    uninstall_libnumadev()
     run("rm -rf %s" % SWAN_HOME)
 
 @task
