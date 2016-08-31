@@ -3,7 +3,7 @@ import time
 
 from functools import wraps
 
-from fabric.api import cd, env, run, sudo
+from fabric.api import cd, env, parallel, roles, run, sudo, execute
 from fabric.context_managers import quiet, shell_env
 from fabric.contrib.files import exists
 from fabric.decorators import task
@@ -12,6 +12,10 @@ from fabric.operations import prompt
 from socket import gethostname
 
 env.hosts = ["localhost"]
+env.roledefs = {
+    'spark_nodes': []  # define the IPs for the spark nodes
+}
+env.roledefs['spark_master'] = env.roledefs['spark_nodes'][0:-1]
 
 ASAP_HOME = "%s/asap" % os.environ['HOME']
 
@@ -27,6 +31,12 @@ IRES_REPO = "https://github.com/project-asap/IReS-Platform.git"
 SPARK_HOME = "%s/spark01" % ASAP_HOME
 SPARK_REPO = "https://github.com/project-asap/spark01.git"
 SPARK_BRANCH = "distScheduling"
+def _get_local_ip():
+    r = run("ifconfig $1 | grep \"inet addr\" | gawk -F: '{print $2}' | gawk '{print $1}'")
+    return [ip for ip in r.split() if ip != "127.0.0.1"][0]
+SPARK_MASTER = env.roledefs['spark_master'][0] \
+    if len(env.roledefs['spark_master']) >= 1 \
+    else _get_local_ip()
 
 SPARK_TESTS_HOME = "%s/spark-tests" % ASAP_HOME
 SPARK_TESTS_REPO = "https://github.com/project-asap/spark-tests.git"
@@ -253,32 +263,35 @@ def bootstrap_IReS():
     start_IReS()
     test_IReS()
 
-@task
 def clone_spark():
     if not exists(SPARK_HOME):
         with cd(ASAP_HOME):
             run("git clone %s" % SPARK_REPO)
 
 
-@task
 def clone_spark_tests():
     if not exists(SPARK_TESTS_HOME):
         with cd(ASAP_HOME):
             run("git clone %s" % SPARK_TESTS_REPO)
 
 @task
+@roles('spark_master')
 def start_spark():
     with cd(SPARK_HOME):
         run("./sbin/start-all.sh")
 
 
 @task
+@roles('spark_master')
 def stop_spark():
     with cd(SPARK_HOME):
         run("./sbin/stop-all.sh")
 
 @task
+@roles('spark_master')
 def build_spark_tests():
+    install_sbt()
+
     with cd(SPARK_TESTS_HOME):
         library_path = os.path.join(SPARK_TESTS_HOME, 'lib')
 
@@ -288,31 +301,34 @@ def build_spark_tests():
         run("sbt clean package")
 
 @task
+@roles('spark_master')
 def test_spark_hierarchical():
     with cd(SPARK_TESTS_HOME):
         run("%s/bin/spark-submit --class HierarchicalKMeansPar "
             "target/scala-2.10/spark-tests_2.10-1.0.jar spark://%s:7077 "
             "100 2 2 2 file:///%s/data/hierRDD/test0.txt --dist-sched false" %
-            (SPARK_HOME, HOSTNAME, SPARK_TESTS_HOME))
+            (SPARK_HOME, SPARK_MASTER, SPARK_TESTS_HOME))
 
 @task
+@roles('spark_master')
 def test_spark_distributed_scheduler():
     with cd(SPARK_TESTS_HOME):
         run("%s/bin/spark-submit --class Run "
         "target/scala-2.10/spark-tests_2.10-1.0.jar "
         "--master spark://%s:7077 --algo Filter33 --dist-sched true "
         "--nsched 4 --partitions 32 --runs 15" %
-        (SPARK_HOME, HOSTNAME))
+        (SPARK_HOME, SPARK_MASTER))
 
 @task
+@roles('spark_master')
 def test_spark():
-    clone_spark_tests()
+    execute(clone_spark_tests)
 
-    build_spark_tests()
+    execute(build_spark_tests)
 
-    #test_nested_map()
-    test_spark_hierarchical()
-    test_spark_distributed_scheduler()
+    #execute(test_nested_map)
+    execute(test_spark_hierarchical)
+    execute(test_spark_distributed_scheduler)
 
 @task
 def install_sbt():
@@ -333,8 +349,11 @@ def install_sbt():
 def uninstall_sbt():
     sudo("apt-get purge sbt")
 
+
 @task
-def bootstrap_spark():
+@parallel
+@roles('spark_nodes')
+def build_spark():
     clone_spark()
 
     with cd(SPARK_HOME):
@@ -346,8 +365,28 @@ def bootstrap_spark():
 
         run("./build/sbt -Dhadoop.version=%s -Pyarn -DskipTests clean assembly"
              % HADOOP_VERSION)
-    start_spark()
-    test_spark()
+
+
+@task
+@parallel
+@roles('spark_nodes')
+def configure_spark():
+    with cd(SPARK_HOME):
+        run("cp conf/spark-env.sh.template conf/spark-env.sh")
+        run("sed -i '/SPARK_MASTER_IP/a SPARK_MASTER_IP=%s' conf/spark-env.sh" % SPARK_MASTER)
+        run("cp conf/spark-defaults.conf.template conf/spark-defaults.conf")
+        if env.host == SPARK_MASTER:
+            run("cp conf/slaves.template conf/slaves")
+            run("sed -i '/localhost/a %s' conf/slaves" % '\\n'.join(env.roledefs['spark_nodes']))
+            run("sed -i '/localhost/d' conf/slaves")
+
+
+@task
+def bootstrap_spark():
+    execute(build_spark)
+    execute(configure_spark)
+    execute(start_spark)
+    execute(test_spark)
 
 @task
 def install_cmake():
@@ -423,7 +462,7 @@ def bootstrap():
         run("mkdir -p %s" % ASAP_HOME)
     bootstrap_wmt()
     bootstrap_IReS()
-    bootstrap_spark()
+    execute(bootstrap_spark)
     bootstrap_swan()
 #    bootstrap_operators()
 #    bootstrap_telecom_analytics()
@@ -446,9 +485,13 @@ def remove_IReS():
     uninstall_mvn()
 
 @task
+@parallel
+@roles('spark_nodes')
 def remove_spark():
-    stop_spark()
+    if env.host == SPARK_MASTER:
+        stop_spark()
     run("rm -rf %s" % SPARK_HOME)
+    run("rm -rf %s" % SPARK_TESTS_HOME)
 
 @task
 def remove():
