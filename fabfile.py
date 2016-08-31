@@ -121,13 +121,13 @@ def uninstall_grunt():
     sudo("npm uninstall -g grunt-cli")
 
 @task
-def config_nginx():
+def config_wmt():
     sites_available = "/etc/nginx/sites-available/%s" % VHOST
     sites_enabled = "/etc/nginx/sites-enabled/%s" % VHOST
     with cd(WMT_HOME):
         sudo("cp wmt.conf.default %s" % sites_available)
-        sudo("sed -ri \"s/(listen).*/\\1\\t8888/\" %s" % sites_available)
-        sudo("sed -r \"s/\/Users\/max\/Projects\/workflow/%s/\" %s" %
+        sudo("sed -ri \"s/(listen)(.*)(;)/\\1\\t%s\\3/\" %s" % (WMT_PORT, sites_available))
+        sudo("sed -ri \"s/\/Users\/max\/Projects\/workflow/%s/\" %s" %
                 ('\/'.join(WMT_HOME.split('/')), sites_available))
         if exists(sites_enabled):
             sudo("rm %s" % sites_enabled)
@@ -136,7 +136,7 @@ def config_nginx():
 @task
 def install_nginx():
     sudo("apt-get install nginx")
-    config_nginx()
+    config_wmt()
 
 @task
 def start_nginx():
