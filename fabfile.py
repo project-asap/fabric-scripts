@@ -196,13 +196,12 @@ def check_for_yarn():
     try:
         HADOOP_PREFIX = os.environ['HADOOP_PREFIX']
     except KeyError:
-        print "Exiting...you should install hadoop/yarn first"
+        print("Exiting...you should install hadoop/yarn first")
         sys.exit(-1)
     else:
         HADOOP_VERSION = run("%s/bin/yarn version|head -1|cut -d ' ' -f 2" % HADOOP_PREFIX)
     return HADOOP_PREFIX, HADOOP_VERSION
 
-@task
 def clone_IReS():
     if not exists(IRES_HOME):
         with cd(ASAP_HOME):
