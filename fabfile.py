@@ -207,11 +207,20 @@ def clone_IReS():
         with cd(ASAP_HOME):
             run("git clone %s" % IRES_REPO)
 
+def start_IReS_new():
+    with cd(IRES_HOME):
+        run('./install.sh -r start')
+
 @task
 def start_IReS():
     with cd(IRES_HOME):
         with shell_env(ASAP_SERVER_HOME='%s' % os.path.join(IRES_HOME, 'asap-platform/asap-server/target')):
             run("nohup ./asap-platform/asap-server/src/main/scripts/asap-server start")
+
+
+def stop_IReS_new():
+    with cd(IRES_HOME):
+        run('./install.sh -r stop')
 
 @task
 def stop_IReS():
@@ -234,8 +243,7 @@ def test_IReS():
             run("mvn exec:java -Dexec.mainClass="
                 "\"gr.ntua.cslab.asap.examples.%s\"" % eg)
 
-@task
-def bootstrap_IReS():
+def bootstrap_IReS_old():
     def build():
         # Conditional build
         if not exists("asap-platform/asap-server/target"):
@@ -259,6 +267,20 @@ def bootstrap_IReS():
         for f in ("core-site.xml", "yarn-site.xml"):
             sudo("cp %s/etc/hadoop/%s "
                 "asap-platform/asap-server/target/conf/" % (HADOOP_PREFIX, f))
+    start_IReS()
+    test_IReS()
+
+@task
+def install_IReS():
+    clone_IReS()
+    with cd(IRES_HOME):
+        HADOOP_PREFIX, _ = check_for_yarn()
+        run('./install.sh')
+
+@task
+def bootstrap_IReS():
+    install_mvn()
+    install_IReS()
     start_IReS()
     test_IReS()
 
@@ -479,7 +501,8 @@ def remove_wmt():
 
 @task
 def remove_IReS():
-    stop_IReS()
+    with quiet():
+        stop_IReS()
     run("rm -rf %s" % IRES_HOME)
     uninstall_mvn()
 
