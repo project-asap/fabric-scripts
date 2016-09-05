@@ -116,7 +116,7 @@ def uninstall_php_fpm():
     sudo('apt-get purge php-fpm')
 
 @task
-@acknowledge('Do you want to remove grant?')
+@acknowledge('Do you want to remove grunt?')
 def uninstall_grunt():
     sudo("npm uninstall -g grunt-cli")
 
