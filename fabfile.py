@@ -65,7 +65,33 @@ def acknowledge(msg):
         return wrapped
     return wrap
 
-@task
+def install_package(package):
+    sudo('apt-get install %s' % package)
+
+def uninstall_package(package):
+    @acknowledge('Do you want to remove %s?' % package)
+    def uninstall():
+        sudo("apt-get purge %s" % package)
+    return uninstall()
+
+def install_requirements(requirements=()):
+    def wrap(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            map(install_package, requirements)
+            func(*args, **kwargs)
+        return wrapped
+    return wrap
+
+def uninstall_requirements(requirements=()):
+    def wrap(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            func(*args, **kwargs)
+            map(uninstall_package, requirements)
+        return wrapped
+    return wrap
+
 def change_xml_property(name, value, file_):
     run("sed -i 's/\(<%s>\)\([^\"]*\)\(<\/%s>\)/\\1%s\\3/g' %s" %
         (name, name, value, file_))
@@ -82,43 +108,24 @@ def wait_until(somepredicate, timeout=100, period=0.25, *args, **kwargs):
         if somepredicate(*args, **kwargs): return
         time.sleep(period)
 
+
+def upload_to_hdfs(local_path, hdfs_path):
+    run('hdfs dfs -put -f %s %s' % (local_path, hdfs_path))
+
 @task
-def install_npm():
-    try:
-        run("npm version")
-    except:
-        sudo("apt-get install npm")
+def config_npm():
     user = os.environ['USER']
     group = run("groups|cut -d ' ' -f 1")
     with quiet():
         sudo("chown -fR %s:%s ~/.npm ~/tmp" % (user, group))
 
-@task
-@acknowledge('Do you want to remove npm?')
-def uninstall_npm():
-    sudo("apt-get purge npm")
 
 @task
-def install_grunt():
-    # install grunt-cli
-    sudo("npm install -g grunt-cli")
+def config_grunt():
     if not exists("/usr/bin/node"):
         # create symbolic link for nodejs
         sudo("ln -s /usr/bin/nodejs /usr/bin/node")
 
-@task
-def install_php_fpm():
-    sudo('apt-get install php-fpm')
-
-@task
-@acknowledge('Do you want to remove php-fpm?')
-def uninstall_php_fpm():
-    sudo('apt-get purge php-fpm')
-
-@task
-@acknowledge('Do you want to remove grunt?')
-def uninstall_grunt():
-    sudo("npm uninstall -g grunt-cli")
 
 @task
 def config_wmt():
@@ -134,11 +141,6 @@ def config_wmt():
         sudo("ln -s %s %s" % (sites_available, sites_enabled))
 
 @task
-def install_nginx():
-    sudo("apt-get install nginx")
-    config_wmt()
-
-@task
 def start_nginx():
     sudo("nginx -s reload")
 
@@ -148,22 +150,6 @@ def stop_nginx():
     with quiet():
         sudo("nginx -s stop")
 
-@task
-@acknowledge('Do you want to remove nginx?')
-def uninstall_nginx():
-    sudo("apt-get purge nginx nginx-common")
-
-@task
-def install_mvn():
-    try :
-        run("mvn -v")
-    except :
-        sudo("apt-get install maven")
-
-@task
-@acknowledge('Do you want to remove maven?')
-def uninstall_mvn():
-    sudo("apt-get purge maven")
 
 @task
 def install_wmt():
@@ -175,20 +161,20 @@ def install_wmt():
         run("grunt")
 
 @task
+@install_requirements(('python-ruamel.yaml',))
 def test_wmt():
     with cd(os.path.join(WMT_HOME, 'pub/py')):
-        sudo('apt-get install python-ruamel.yaml')
         run('python -m unittest -v testmain')
     content = run("curl http://localhost:%s" % WMT_PORT)
     assert("workflow" in content)
 
 @task
+@install_requirements(('npm', 'php-fpm', 'nginx'))
 def bootstrap_wmt():
-    install_npm()
-    install_php_fpm()
-    install_grunt()
+    config_npm()
+    config_grunt()
     install_wmt()
-    install_nginx()
+    config_wmt()
     start_nginx()
     test_wmt()
 
@@ -243,6 +229,8 @@ def test_IReS():
             run("mvn exec:java -Dexec.mainClass="
                 "\"gr.ntua.cslab.asap.examples.%s\"" % eg)
 
+
+@install_requirements(('maven',))
 def bootstrap_IReS_old():
     def build():
         # Conditional build
@@ -250,8 +238,6 @@ def bootstrap_IReS_old():
             for d in ("panic", "cloudera-kitten", "asap-platform"):
                 with cd(d):
                     run("mvn clean install -DskipTests")
-
-    install_mvn()
 
     clone_IReS()
 
@@ -278,8 +264,8 @@ def install_IReS():
         run('./install.sh')
 
 @task
+@install_requirements(('maven',))
 def bootstrap_IReS():
-    install_mvn()
     install_IReS()
     start_IReS()
     test_IReS()
@@ -365,11 +351,6 @@ def install_sbt():
         sudo("apt-get update")
         sudo("apt-get install sbt")
 
-@task
-@acknowledge('Do you want to remove sbt?')
-def uninstall_sbt():
-    sudo("apt-get purge sbt")
-
 
 @task
 @parallel
@@ -410,15 +391,6 @@ def bootstrap_spark():
     execute(test_spark)
 
 @task
-def install_cmake():
-    sudo('apt-get install cmake')
-
-@task
-@acknowledge('Do you want to remove cmake?')
-def uninstall_cmake():
-    sudo("apt-get purge cmake")
-
-@task
 def install_libnumadev():
     sudo('apt-get install libnuma-dev')
 
@@ -438,10 +410,8 @@ def test_clang():
             run('clang llvm/utils/count/count.c -S -O3 -o -')
 
 @task
+@install_requirements(('cmake', 'libnuma-dev', 'libtool', 'm4', 'automake'))
 def bootstrap_swan():
-    install_cmake()
-    install_libnumadev()
-
     run('mkdir -pp %s' % SWAN_HOME)
 
     with cd(SWAN_HOME):
@@ -471,9 +441,8 @@ def bootstrap_swan():
             run("make CXX=../build/bin/clang++ SWANRTDIR=../swan_runtime test")
 
 @task
+@uninstall_requirements(('cmake', 'libnuma-dev', 'libtool', 'automake'))
 def remove_swan():
-    uninstall_cmake()
-    uninstall_libnumadev()
     run("rm -rf %s" % SWAN_HOME)
 
 @task
@@ -491,20 +460,17 @@ def bootstrap():
 
 
 @task
+@uninstall_requirements(('nginx', 'nginx-common', 'php-fpm', 'npm'))
 def remove_wmt():
     stop_nginx()
-    uninstall_nginx()
     run("rm -rf %s" % WMT_HOME)
-    uninstall_grunt()
-    uninstall_php_fpm()
-    uninstall_npm()
 
 @task
+@uninstall_requirements(('maven',))
 def remove_IReS():
     with quiet():
         stop_IReS()
     run("rm -rf %s" % IRES_HOME)
-    uninstall_mvn()
 
 @task
 @parallel
@@ -520,5 +486,6 @@ def remove():
     remove_wmt()
     remove_IReS()
     remove_spark()
+    remove_swan()
 
     run("rm -rf %s" % ASAP_HOME)

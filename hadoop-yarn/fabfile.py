@@ -92,7 +92,6 @@ REQUIREMENTS_PRE_COMMANDS = []
 ENVIRONMENT_FILE_NOTAUTOLOADED = True
 #ENVIRONMENT_FILE = "/home/ubuntu/.bashrc"
 ENVIRONMENT_FILE = "%s/.profile" % os.environ['HOME']
-print "---->%s" % ENVIRONMENT_FILE
 #ENVIRONMENT_FILE_NOTAUTOLOADED = True
 #ENVIRONMENT_FILE = "/home/ubuntu/hadoop2_env.sh"
 
