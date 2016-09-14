@@ -3,7 +3,7 @@ import time
 
 from functools import wraps
 
-from fabric.api import cd, env, parallel, roles, run, sudo, execute
+from fabric.api import cd, env, parallel, roles, run, sudo, execute, warn_only
 from fabric.context_managers import quiet, shell_env
 from fabric.contrib.files import exists
 from fabric.decorators import task
@@ -202,11 +202,13 @@ def start_IReS():
     with cd(IRES_HOME):
         with shell_env(ASAP_SERVER_HOME='%s' % os.path.join(IRES_HOME, 'asap-platform/asap-server/target')):
             run("nohup ./asap-platform/asap-server/src/main/scripts/asap-server start")
+    wait_until(ping_service, url='http://localhost:1323', status='200')
 
 
 def stop_IReS_new():
     with cd(IRES_HOME):
         run('./install.sh -r stop')
+
 
 @task
 def stop_IReS():
@@ -215,19 +217,24 @@ def stop_IReS():
             run("./asap-platform/asap-server/src/main/scripts/asap-server stop")
 
 
-
 @task
 def test_IReS():
-    wait_until(ping_service, url='http://localhost:1323', status='200')
     with shell_env(ASAP_HOME='%s' % IRES_HOME):
         with cd(IRES_HOME):
             for d in ("panic", "cloudera-kitten", "asap-platform"):
                 with cd(d):
                     run("mvn -Dmaven.test.failure.ignore verify")
+
+
+@task
+def run_IReS_examples():
+    with quiet():
+        start_IReS()
     with cd("%s/asap-platform/asap-client" % IRES_HOME):
-        for eg in ("TestOperators", "TestWorkflows"):
-            run("mvn exec:java -Dexec.mainClass="
-                "\"gr.ntua.cslab.asap.examples.%s\"" % eg)
+        for eg in ("TestOperators", "TestWorkflows", "TestWorkflowsIMR"):
+            with warn_only():
+                run("mvn exec:java -Dexec.mainClass="
+                    "\"gr.ntua.cslab.asap.examples.%s\"" % eg)
 
 
 @install_requirements(('maven',))
