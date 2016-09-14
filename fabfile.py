@@ -318,10 +318,11 @@ def build_spark_tests():
 @roles('spark_master')
 def test_spark_hierarchical():
     with cd(SPARK_TESTS_HOME):
+        upload_to_hdfs('data/hierRDD/test0.txt', '/tmp/test0.txt')
         run("%s/bin/spark-submit --class HierarchicalKMeansPar "
             "target/scala-2.10/spark-tests_2.10-1.0.jar spark://%s:7077 "
-            "100 2 2 2 file:///%s/data/hierRDD/test0.txt --dist-sched false" %
-            (SPARK_HOME, SPARK_MASTER, SPARK_TESTS_HOME))
+            "100 2 2 2 /tmp/test0.txt --dist-sched false" %
+            (SPARK_HOME, SPARK_MASTER))
 
 @task
 @roles('spark_master')
