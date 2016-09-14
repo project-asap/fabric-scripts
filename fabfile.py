@@ -425,7 +425,6 @@ def bootstrap_swan():
     with cd(SWAN_HOME):
         if (not exists(os.path.join(SWAN_HOME, 'llvm'))):
             run("git clone %s llvm" % SWAN_LLVM_REPO)
-        run('mkdir -p llvm/tools/clang')
         if (not exists(os.path.join(SWAN_HOME, 'llvm/tools/clang'))):
             run("git clone %s llvm/tools/clang" % SWAN_CLANG_REPO)
         run('mkdir -p build')
