@@ -28,6 +28,7 @@ HOSTNAME = gethostname()
 
 IRES_HOME = "%s/IReS-Platform" % ASAP_HOME
 IRES_REPO = "https://github.com/project-asap/IReS-Platform.git"
+IRES_BRANCH = 'project-asap-patch-3'
 
 SPARK_HOME = "%s/spark01" % ASAP_HOME
 SPARK_REPO = "https://github.com/project-asap/spark01.git"
@@ -195,22 +196,12 @@ def clone_IReS():
         with cd(ASAP_HOME):
             run("git clone %s" % IRES_REPO)
 
-def start_IReS_new():
-    with cd(IRES_HOME):
-        run('./install.sh -r start')
-
 @task
 def start_IReS():
     with cd(IRES_HOME):
         with shell_env(ASAP_SERVER_HOME='%s' % os.path.join(IRES_HOME, 'asap-platform/asap-server/target')):
             run("nohup ./asap-platform/asap-server/src/main/scripts/asap-server start")
     wait_until(ping_service, url='http://localhost:1323', status='200')
-
-
-def stop_IReS_new():
-    with cd(IRES_HOME):
-        run('./install.sh -r stop')
-
 
 @task
 def stop_IReS():
@@ -251,6 +242,7 @@ def bootstrap_IReS_old():
     clone_IReS()
 
     with cd(IRES_HOME):
+        run("git checkout %s" % IRES_BRANCH)
         # Temporary hack for solving temporary issues with inner dependencies
         with quiet():
             build()
@@ -260,7 +252,7 @@ def bootstrap_IReS_old():
         for f in ('asap-platform/pom.xml', 'cloudera-kitten/pom.xml'):
             change_xml_property("hadoop.version", HADOOP_VERSION, f)
         for f in ("core-site.xml", "yarn-site.xml"):
-            sudo("cp %s/etc/hadoop/%s "
+            run("ln -s %s/etc/hadoop/%s "
                 "asap-platform/asap-server/target/conf/" % (HADOOP_PREFIX, f))
     start_IReS()
     test_IReS()
@@ -278,6 +270,7 @@ def bootstrap_IReS():
     install_IReS()
     start_IReS()
     test_IReS()
+    #run_IReS_examples()
 
 def clone_spark():
     if not exists(SPARK_HOME):
