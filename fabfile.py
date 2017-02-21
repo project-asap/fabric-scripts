@@ -22,6 +22,7 @@ ASAP_HOME = "%s/asap" % os.environ['HOME']
 WMT_HOME = "%s/workflow" % ASAP_HOME
 WMT_REPO = "https://github.com/project-asap/workflow.git"
 WMT_PORT = "8888"
+WMT_BRANCH = 'integration'
 
 HOSTNAME = gethostname()
 
@@ -142,13 +143,13 @@ def config_wmt():
 
 @task
 def start_nginx():
-    sudo("nginx -s reload")
+    sudo('/etc/init.d/nginx restart')
 
 @task
 @acknowledge('Do you want to stop nginx?')
 def stop_nginx():
     with quiet():
-        sudo("nginx -s stop")
+        sudo('/etc/init.d/nginx stop')
 
 
 @task
@@ -157,6 +158,7 @@ def install_wmt():
         with cd(ASAP_HOME):
             run("git clone %s" % WMT_REPO)
     with cd(WMT_HOME):
+        run('git checkout %s' % WMT_BRANCH)
         run("npm install")
         run("grunt")
 
@@ -165,7 +167,7 @@ def install_wmt():
 def test_wmt():
     with cd(os.path.join(WMT_HOME, 'pub/py')):
         run('python -m unittest -v testmain')
-    content = run("curl http://localhost:%s" % WMT_PORT)
+    content = run("curl http://localhost:%s/main.html" % WMT_PORT)
     assert("workflow" in content)
 
 @task
