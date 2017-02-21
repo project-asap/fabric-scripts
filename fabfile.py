@@ -30,9 +30,9 @@ IRES_HOME = "%s/IReS-Platform" % ASAP_HOME
 IRES_REPO = "https://github.com/project-asap/IReS-Platform.git"
 IRES_BRANCH = 'project-asap-patch-3'
 
-SPARK_HOME = "%s/spark01" % ASAP_HOME
-SPARK_REPO = "https://github.com/project-asap/spark01.git"
-SPARK_BRANCH = "distScheduling"
+SPARK_FORTH_REPO = "https://github.com/project-asap/spark01.git"
+SPARK_FORTH_HOME = "/".join([ASAP_HOME, SPARK_FORTH_REPO.split('/')[-1].rsplit('.', 1)[0]])
+SPARK_FORTH_BRANCH = "final"
 def _get_local_ip():
     r = run("ifconfig $1 | grep \"inet addr\" | gawk -F: '{print $2}' | gawk '{print $1}'")
     return [ip for ip in r.split() if ip != "127.0.0.1"][0]
@@ -40,8 +40,12 @@ SPARK_MASTER = env.roledefs['spark_master'][0] \
     if len(env.roledefs['spark_master']) >= 1 \
     else _get_local_ip()
 
-SPARK_TESTS_HOME = "%s/spark-tests" % ASAP_HOME
-SPARK_TESTS_REPO = "https://github.com/project-asap/spark-tests.git"
+SPARK_VERSION = '1.6.0'
+SPARK_DOWNLOAD_LINK = 'http://d3kbcqa49mib13.cloudfront.net/spark-%s-bin-without-hadoop.tgz' % SPARK_VERSION
+SPARK_HOME = "/".join([ASAP_HOME, SPARK_DOWNLOAD_LINK.split('/')[-1].rsplit('.', 1)[0]])
+
+SPARK_FORTH_TESTS_HOME = "%s/spark-tests" % ASAP_HOME
+SPARK_FORTH_TESTS_REPO = "https://github.com/project-asap/spark-tests.git"
 
 SWAN_HOME = "%s/swan" % ASAP_HOME
 SWAN_LLVM_REPO = "https://github.com/project-asap/swan_llvm.git"
@@ -272,23 +276,39 @@ def bootstrap_IReS():
     test_IReS()
     #run_IReS_examples()
 
-def clone_spark():
-    if not exists(SPARK_HOME):
+def clone_spark_forth():
+    if not exists(SPARK_FORTH_HOME):
         with cd(ASAP_HOME):
-            run("git clone %s" % SPARK_REPO)
+            run("git clone %s %s" % (SPARK_FORTH_REPO, SPARK_FORTH_HOME))
 
 
-def clone_spark_tests():
-    if not exists(SPARK_TESTS_HOME):
+def clone_spark_forth_tests():
+    if not exists(SPARK_FORTH_TESTS_HOME):
         with cd(ASAP_HOME):
-            run("git clone %s" % SPARK_TESTS_REPO)
+            run("git clone %s" % SPARK_FORTH_TESTS_REPO)
+
+@task
+@roles('spark_master')
+def start_spark_forth():
+    with quiet():
+        stop_spark()
+    with cd(SPARK_FORTH_HOME):
+        run("./sbin/start-all.sh")
+
 
 @task
 @roles('spark_master')
 def start_spark():
+    with quiet():
+        stop_spark_forth()
     with cd(SPARK_HOME):
         run("./sbin/start-all.sh")
 
+@task
+@roles('spark_master')
+def stop_spark_forth():
+    with cd(SPARK_FORTH_HOME):
+        run("./sbin/stop-all.sh")
 
 @task
 @roles('spark_master')
@@ -298,47 +318,59 @@ def stop_spark():
 
 @task
 @roles('spark_master')
-def build_spark_tests():
+def build_spark_forth_tests():
     install_sbt()
 
-    with cd(SPARK_TESTS_HOME):
-        library_path = os.path.join(SPARK_TESTS_HOME, 'lib')
+    with cd(SPARK_FORTH_TESTS_HOME):
+        library_path = os.path.join(SPARK_FORTH_TESTS_HOME, 'lib')
 
         # copy spark-assembly jar to the library
         run("mkdir -p %s" % library_path)
-        run("cp %s/assembly/target/scala-2.10/spark-assembly-*.jar lib/" % SPARK_HOME)
+        run("cp %s/assembly/target/scala-2.10/spark-assembly-*.jar lib/" % SPARK_FORTH_HOME)
         run("sbt clean package")
 
 @task
 @roles('spark_master')
-def test_spark_hierarchical():
-    with cd(SPARK_TESTS_HOME):
+def test_spark_forth_nested():
+    with cd(SPARK_FORTH_TESTS_HOME):
+        for clss in ('NestedMap1', 'NestedFilter1'):
+            run("%s/bin/spark-submit --class %s "
+                "target/scala-2.10/spark-tests_2.10-1.0.jar spark://%s:7077" %
+                (SPARK_FORTH_HOME, clss, SPARK_MASTER))
+@task
+@roles('spark_master')
+def test_spark_forth_hierarchical():
+    with cd(SPARK_FORTH_TESTS_HOME):
         upload_to_hdfs('data/hierRDD/test0.txt', '/tmp/test0.txt')
         run("%s/bin/spark-submit --class HierarchicalKMeansPar "
             "target/scala-2.10/spark-tests_2.10-1.0.jar spark://%s:7077 "
             "100 2 2 2 /tmp/test0.txt --dist-sched false" %
-            (SPARK_HOME, SPARK_MASTER))
+            (SPARK_FORTH_HOME, SPARK_MASTER))
 
 @task
 @roles('spark_master')
-def test_spark_distributed_scheduler():
-    with cd(SPARK_TESTS_HOME):
+def test_spark_forth_distributed_scheduler():
+    with cd(SPARK_FORTH_TESTS_HOME):
         run("%s/bin/spark-submit --class Run "
         "target/scala-2.10/spark-tests_2.10-1.0.jar "
         "--master spark://%s:7077 --algo Filter33 --dist-sched true "
         "--nsched 4 --partitions 32 --runs 15" %
-        (SPARK_HOME, SPARK_MASTER))
+        (SPARK_FORTH_HOME, SPARK_MASTER))
+
+@task
+@roles('spark_master')
+def test_spark_forth():
+    execute(clone_spark_forth_tests)
+    execute(build_spark_forth_tests)
+    execute(test_spark_forth_nested)
+    execute(test_spark_forth_hierarchical)
+    execute(test_spark_forth_distributed_scheduler)
 
 @task
 @roles('spark_master')
 def test_spark():
-    execute(clone_spark_tests)
-
-    execute(build_spark_tests)
-
-    #execute(test_nested_map)
-    execute(test_spark_hierarchical)
-    execute(test_spark_distributed_scheduler)
+    with cd(SPARK_HOME):
+        run('MASTER=spark://%s:7077 ./bin/run-example SparkPi' % SPARK_MASTER)
 
 @task
 def install_sbt():
@@ -358,12 +390,12 @@ def install_sbt():
 @task
 @parallel
 @roles('spark_nodes')
-def build_spark():
-    clone_spark()
+def build_spark_forth():
+    clone_spark_forth()
 
-    with cd(SPARK_HOME):
+    with cd(SPARK_FORTH_HOME):
         _, HADOOP_VERSION = check_for_yarn()
-        run("git checkout %s" % SPARK_BRANCH)
+        run("git checkout %s" % SPARK_FORTH_BRANCH)
 
         # Change sbt version causing IllegalStateException https://github.com/sbt/sbt/issues/2015
         run("sed -i \"/sbt.version=/ s/=.*/=%s/\" project/build.properties" % SBT_VERSION)
@@ -372,14 +404,14 @@ def build_spark():
              % HADOOP_VERSION)
 
 
-@task
-@parallel
-@roles('spark_nodes')
-def configure_spark():
-    with cd(SPARK_HOME):
+def configure_spark_basic(spark_dir):
+    with cd(spark_dir):
         run("cp conf/spark-env.sh.template conf/spark-env.sh")
         run("sed -i '/SPARK_MASTER_IP/a SPARK_MASTER_IP=%s' conf/spark-env.sh" % SPARK_MASTER)
+        # TODO set PYSPARK_PYTHON
+        # TODO set HADOOP_CONFDIR
         run("cp conf/spark-defaults.conf.template conf/spark-defaults.conf")
+        run("echo 'spark.rpc akka' >> conf/spark-defaults.conf")
         if env.host == SPARK_MASTER:
             run("cp conf/slaves.template conf/slaves")
             run("sed -i '/localhost/a %s' conf/slaves" % '\\n'.join(env.roledefs['spark_nodes']))
@@ -387,11 +419,46 @@ def configure_spark():
 
 
 @task
+@parallel
+@roles('spark_nodes')
+def configure_spark_forth():
+    configure_spark_basic(SPARK_FORTH_HOME)
+
+@task
+@parallel
+@roles('spark_nodes')
+def configure_spark():
+    configure_spark_basic(SPARK_HOME)
+    with cd(SPARK_HOME):
+        HADOOP_PREFIX, _ = check_for_yarn()
+        hadoop_classpath = run("%s/bin/hadoop classpath" % HADOOP_PREFIX)
+        run("echo 'export SPARK_DIST_CLASSPATH=%s' >> conf/spark-env.sh" % hadoop_classpath)
+        JAVA_HOME = os.environ['JAVA_HOME']
+        run("echo 'export JAVA_HOME=%s' >> conf/spark-env.sh" % JAVA_HOME)
+
+
+@task
+def download_spark():
+    with cd(ASAP_HOME):
+        tarball = SPARK_DOWNLOAD_LINK.split('/')[-1]
+        if (not exists(tarball)):
+            run('wget %s' % SPARK_DOWNLOAD_LINK)
+        tarball = SPARK_DOWNLOAD_LINK.split('/')[-1]
+        run('tar -xvf %s' % tarball)
+
+@task
 def bootstrap_spark():
-    execute(build_spark)
+    execute(download_spark)
     execute(configure_spark)
     execute(start_spark)
     execute(test_spark)
+
+@task
+def bootstrap_spark_forth():
+    execute(build_spark_forth)
+    execute(configure_spark_forth)
+    execute(start_spark_forth)
+    execute(test_spark_forth)
 
 @task
 def install_libnumadev():
@@ -454,6 +521,7 @@ def bootstrap():
         run("mkdir -p %s" % ASAP_HOME)
     bootstrap_wmt()
     bootstrap_IReS()
+    execute(bootstrap_spark_forth)
     execute(bootstrap_spark)
     bootstrap_swan()
 #    bootstrap_operators()
@@ -477,17 +545,26 @@ def remove_IReS():
 @task
 @parallel
 @roles('spark_nodes')
+def remove_spark_forth():
+    if env.host == SPARK_MASTER:
+        stop_spark_forth()
+    run("rm -rf %s" % SPARK_FORTH_HOME)
+    run("rm -rf %s" % SPARK_FORTH_TESTS_HOME)
+
+@task
+@parallel
+@roles('spark_nodes')
 def remove_spark():
     if env.host == SPARK_MASTER:
         stop_spark()
     run("rm -rf %s" % SPARK_HOME)
-    run("rm -rf %s" % SPARK_TESTS_HOME)
 
 @task
 def remove():
     remove_wmt()
     remove_IReS()
     remove_spark()
+    remove_spark_forth()
     remove_swan()
 
-    run("rm -rf %s" % ASAP_HOME)
+    #run("rm -rf %s" % ASAP_HOME)
