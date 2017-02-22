@@ -176,6 +176,15 @@ def test_wmt():
     assert("workflow" in content)
 
 @task
+def bootstrap_postgres():
+    install_package('postgresql-contrib')
+    install_package('postgresql')
+
+@task
+def remove_postgres():
+    uninstall_package('postgresql')
+
+@task
 @install_requirements(('npm', 'php-fpm', 'nginx'))
 def bootstrap_wmt():
     config_npm()
@@ -519,6 +528,7 @@ def bootstrap():
 
     if not exists(ASAP_HOME):
         run("mkdir -p %s" % ASAP_HOME)
+    bootstrap_postgres
     bootstrap_wmt()
     bootstrap_IReS()
     execute(bootstrap_spark_forth)
@@ -566,5 +576,6 @@ def remove():
     remove_spark()
     remove_spark_forth()
     remove_swan()
+    remove_postgres()
 
     #run("rm -rf %s" % ASAP_HOME)
